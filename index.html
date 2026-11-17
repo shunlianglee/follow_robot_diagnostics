@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跟隨機器人診斷台</title>
+<style>
+:root{
+  --bg:#f4f5f2; --panel:#ffffff; --ink:#1d2321; --muted:#66706b; --line:#d9ddd8;
+  --accent:#0b7a6b; --err:#c0392b; --warn:#c77d0a; --ok:#2e8b57; --info:#3a6ea5;
+  --a0:#d0573a; --a1:#2f6fb5; --grid:#e8ebe7; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141917; --panel:#1c2220; --ink:#e4e9e6; --muted:#93a09a; --line:#2e3733;
+    --accent:#3fc1ac; --err:#ef6b5b; --warn:#e9a93a; --ok:#58c48a; --info:#6fa3dc;
+    --a0:#f08261; --a1:#6ba6e8; --grid:#25302c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141917; --panel:#1c2220; --ink:#e4e9e6; --muted:#93a09a; --line:#2e3733;
+  --accent:#3fc1ac; --err:#ef6b5b; --warn:#e9a93a; --ok:#58c48a; --info:#6fa3dc;
+  --a0:#f08261; --a1:#6ba6e8; --grid:#25302c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+header h1{font-size:17px;margin:0 12px 0 0;letter-spacing:.5px}
+header input{font:13px var(--mono);padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+#url{width:270px} #prefix{width:130px}
+button{font:inherit;font-size:13px;padding:5px 12px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:hover{filter:brightness(1.08)}
+.pill{font:12px var(--mono);padding:3px 9px;border-radius:99px;border:1px solid var(--line)}
+.pill.on{color:#fff;background:var(--ok);border-color:var(--ok)} .pill.off{color:#fff;background:var(--err);border-color:var(--err)} .pill.demo{color:#fff;background:var(--info);border-color:var(--info)}
+main{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr) minmax(260px,320px);gap:14px;padding:14px 16px}
+@media (max-width:1150px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+section h2{font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600;letter-spacing:.4px}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.diag{border-left:4px solid var(--line);padding:7px 10px;margin:0 0 8px;border-radius:0 6px 6px 0;background:var(--bg)}
+.diag.err{border-color:var(--err)} .diag.warn{border-color:var(--warn)} .diag.ok{border-color:var(--ok)} .diag.info{border-color:var(--info)}
+.diag b{display:block;font-size:13.5px}
+.diag .tag{font:11px var(--mono);padding:0 6px;border-radius:4px;color:#fff;margin-right:6px;vertical-align:1px}
+.diag.err .tag{background:var(--err)} .diag.warn .tag{background:var(--warn)} .diag.ok .tag{background:var(--ok)} .diag.info .tag{background:var(--info)}
+.diag .ev{font:12px var(--mono);color:var(--muted);margin-top:2px;white-space:pre-wrap}
+.diag .fix{font-size:12.5px;margin-top:3px}
+canvas{width:100%;display:block;border-radius:6px;background:var(--bg)}
+#top{aspect-ratio:1/1;max-height:460px}
+.chart{height:150px;margin-bottom:6px}
+.legend{font:12px var(--mono);color:var(--muted);margin:2px 0 10px}
+.legend i{display:inline-block;width:10px;height:3px;margin:0 4px 3px 10px;vertical-align:middle}
+table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+td{padding:3px 4px;border-bottom:1px dashed var(--line);vertical-align:top;word-break:break-all}
+td:first-child{color:var(--muted);width:48%;font-family:inherit}
+.rowflex{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+textarea{width:100%;min-height:90px;font:13px/1.5 inherit;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+#log{font:12px/1.45 var(--mono);height:220px;overflow:auto;background:var(--bg);border-radius:6px;padding:6px 8px;white-space:pre-wrap}
+#log .e{color:var(--err)} #log .w{color:var(--warn)} #log .i{color:var(--info)}
+details summary{cursor:pointer;color:var(--muted);font-weight:600}
+.cfg{display:grid;grid-template-columns:1fr 90px;gap:4px 8px;margin-top:8px;font-size:12.5px;align-items:center}
+.cfg input{width:100%;font:12px var(--mono);padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink)}
+label.chk{display:flex;gap:6px;align-items:center;font-size:13px}
+.small{font-size:12px;color:var(--muted)}
+.big{font:600 22px var(--mono)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.kpi{background:var(--bg);border-radius:8px;padding:6px 8px}
+.kpi span{display:block;font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>跟隨機器人診斷台</h1>
+  <input id="url" value="ws://mqttgo.io:8000/mqtt" title="MQTT over WebSocket 位址">
+  <input id="prefix" value="hust/banana" title="Topic 前綴">
+  <button class="primary" id="btnConn">連線</button>
+  <button id="btnDemo">模擬資料</button>
+  <span id="connPill" class="pill off">未連線</span>
+  <span class="small" id="libState"></span>
+  <span style="flex:1"></span>
+  <button id="btnReport" class="primary">產生診斷報告（複製給 Claude）</button>
+  <button id="btnCsv">下載 CSV</button>
+  <button id="btnClear">清除</button>
+</header>
+
+<main>
+  <!-- 左：診斷 -->
+  <div class="col">
+    <section>
+      <h2>自動診斷（每 0.5 秒更新）</h2>
+      <div id="diagList"></div>
+    </section>
+    <section>
+      <h2>現場觀察 / 測試情境</h2>
+      <label class="chk"><input type="checkbox" id="chkCenter"> Tag 目前靜止在機器人正前方中心線上</label>
+      <label class="chk"><input type="checkbox" id="chkWheelsOff"> 輪子已架空（桌測）</label>
+      <div class="rowflex" style="margin:8px 0">
+        <span class="small">實際觀察到車子：</span>
+        <button data-obs="前進">前進</button><button data-obs="後退">後退</button>
+        <button data-obs="左轉">左轉</button><button data-obs="右轉">右轉</button>
+        <button data-obs="不動">不動</button><button data-obs="抖動/左右擺">抖動</button>
+      </div>
+      <textarea id="notes" placeholder="描述你看到的問題，例如：人走到右前方 2m，車子反而往左轉；或 FOLLOW 模式下輪子完全不動……"></textarea>
+      <p class="small">按上面的觀察按鈕會把「當下的 x, y, CH1, CH2 與預期方向」記到事件紀錄裡，報告會一起帶出來。</p>
+    </section>
+  </div>
+
+  <!-- 中：視覺化 -->
+  <div class="col">
+    <section>
+      <h2>俯視圖（機器人座標，cm）</h2>
+      <div class="kpis">
+        <div class="kpi"><span>x（左負右正）</span><div class="big" id="kx">—</div></div>
+        <div class="kpi"><span>y（前方距離）</span><div class="big" id="ky">—</div></div>
+        <div class="kpi"><span>位置判定</span><div class="big" id="kr" style="font-size:16px">—</div></div>
+      </div>
+      <canvas id="top" width="700" height="700"></canvas>
+      <p class="small">灰框 = 允許移動範圍；綠帶 = 目標距離死區；虛線 = x 死區。散點 = 每筆原始定位（實心有效、空心被拒絕）；<b>藍線與大圈 = 濾波後位置（車子實際用的）</b>。</p>
+    </section>
+    <section>
+      <h2>時間序列（最近 30 秒）</h2>
+      <canvas class="chart" id="cRaw" width="900" height="150"></canvas>
+      <div class="legend"><i style="background:var(--a0)"></i>A0 校正後斜距<i style="background:var(--a1)"></i>A1 校正後斜距（含 trim）</div>
+      <canvas class="chart" id="cXY" width="900" height="150"></canvas>
+      <div class="legend"><i style="background:var(--accent)"></i>y（濾波後）<i style="background:var(--warn);opacity:.4"></i>x 原始<i style="background:var(--info)"></i>x 濾波後（控制用）</div>
+      <canvas class="chart" id="cOut" width="900" height="150"></canvas>
+      <div class="legend"><i style="background:var(--info)"></i>OUT CH1 − 中位（轉向）<i style="background:var(--err)"></i>OUT CH2 − 中位（油門）</div>
+    </section>
+    <section>
+      <h2>事件紀錄</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+
+  <!-- 右：即時數值 + 參數 -->
+  <div class="col">
+    <section>
+      <h2>Topic 健康度</h2>
+      <table id="tTopics"></table>
+    </section>
+    <section>
+      <h2>Banana 控制器 status</h2>
+      <table id="tStatus"></table>
+    </section>
+    <section>
+      <h2>Tag tag_status</h2>
+      <table id="tTag"></table>
+    </section>
+    <section>
+      <h2>最近 5 秒統計</h2>
+      <table id="tStats"></table>
+    </section>
+    <section>
+      <details>
+        <summary>控制器參數（需與 Banana 韌體一致）</summary>
+        <div class="cfg" id="cfgBox"></div>
+        <p class="small">這些值只用來在網頁端重算位置與判斷，不會送回機器人。</p>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script>
+// ===================== 參數（鏡像 Banana V10.2/V10.3） =====================
+const CFG = {
+  BASELINE_CM:35, UWB_HEIGHT_DIFF_CM:100,
+  A0_SLOPE:0.9133, A0_OFFSET_CM:9.21, A1_SLOPE:0.9133, A1_OFFSET_CM:26.56,
+  TARGET_Y_CM:150, Y_DEADBAND_CM:20, X_DEADBAND_CM:25,
+  MIN_Y_CM:90, MAX_Y_CM:300, MAX_ABS_X_CM:120,
+  UWB_TIMEOUT_MS:600, CH1_CENTER:1503, CH2_CENTER:1492,
+  CH5_MANUAL_MIN:1700, CH5_FOLLOW_MAX:1300
+};
+const cfgBox = document.getElementById('cfgBox');
+const cfgInputs = {};
+function syncCfgBox(){ for (const k in cfgInputs) cfgInputs[k].value = CFG[k]; }
+for (const k of Object.keys(CFG)) {
+  const l = document.createElement('label'); l.textContent = k;
+  const i = document.createElement('input'); i.value = CFG[k]; cfgInputs[k] = i;
+  i.onchange = () => { const v = parseFloat(i.value); if (isFinite(v)) { CFG[k] = v; log('i', `參數 ${k} = ${v}`); } };
+  cfgBox.append(l, i);
+}
+
+// ===================== 狀態 =====================
+const S = {
+  client:null, connected:false, demo:false, demoTimer:null,
+  topics:{}, // name -> {count, last, gaps:[] }
+  status:null, statusT:0, tag:null, tagT:0, enable:null, enableT:0,
+  samples:[],     // {t,L,R,cl,cr,x,y,ok,reason}
+  outs:[],        // {t,ch1,ch2,mode,ready}
+  modeChanges:[], lastMode:null,
+  logs:[], diags:[], connT:0, everStatus:false, retained:{}
+};
+const TOPIC_NAMES = ['status','uwb','uwb_mon','follow_enable','tag_status'];
+function resetTopics(){ for (const n of TOPIC_NAMES) S.topics[n] = {count:0,last:0,gaps:[]}; }
+resetTopics();
+const now = () => performance.now();
+const fmt = (v,d=1) => (v===null||v===undefined||!isFinite(v)) ? '—' : Number(v).toFixed(d);
+
+function log(level, msg){
+  const t = new Date().toLocaleTimeString('zh-TW',{hour12:false});
+  S.logs.push({t, level, msg}); if (S.logs.length > 400) S.logs.shift();
+  const el = document.getElementById('log');
+  const d = document.createElement('div'); d.className = level; d.textContent = `${t}  ${msg}`;
+  el.appendChild(d); while (el.childNodes.length > 400) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ===================== 位置計算（與 Banana locateTag 相同） =====================
+function locate(L, R, trim){
+  const r = {cl:NaN, cr:NaN, x:NaN, y:NaN, ok:false, reason:'BAD_RAW'};
+  if (!isFinite(L) || !isFinite(R) || L<=0 || R<=0) return r;
+  const dl = CFG.A0_SLOPE*L + CFG.A0_OFFSET_CM;
+  const dr = CFG.A1_SLOPE*R + CFG.A1_OFFSET_CM + (trim||0);
+  r.cl = dl; r.cr = dr;
+  const hh = CFG.UWB_HEIGHT_DIFF_CM**2;
+  if (dl*dl <= hh || dr*dr <= hh) { r.reason = 'TOO_CLOSE_H'; return r; }
+  const rl2 = dl*dl-hh, rr2 = dr*dr-hh, B = CFG.BASELINE_CM;
+  const x = (rl2-rr2)/(2*B);
+  const yy = rl2 - (x+B/2)**2;
+  r.x = x;
+  if (!(yy>0)) { r.reason = 'GEOMETRY'; return r; }
+  const y = Math.sqrt(yy); r.y = y;
+  r.ok = y>=CFG.MIN_Y_CM && y<=CFG.MAX_Y_CM && Math.abs(x)<=CFG.MAX_ABS_X_CM;
+  r.reason = r.ok ? 'OK' : 'OUT_OF_BOUNDS';
+  return r;
+}
+
+// ===================== 與 Banana V11.6 相同的濾波 =====================
+const FILT = {N:9, AX:0.20, AY:0.6};
+S.f = {bl:[], br:[], xF:NaN, yF:NaN, lastT:0};
+function addSample(t, L, R){
+  const trim = S.status && isFinite(S.status.a1_trim_cm) ? S.status.a1_trim_cm : 0;
+  const raw = locate(L, R, trim);
+  const f = S.f;
+  if (t - f.lastT > 1000) { f.bl = []; f.br = []; f.xF = NaN; f.yF = NaN; }
+  f.lastT = t;
+  f.bl.push(L); f.br.push(R); if (f.bl.length > FILT.N) { f.bl.shift(); f.br.shift(); }
+  const med = a => { const b = [...a].sort((p,q)=>p-q), n = b.length; return n%2 ? b[(n-1)/2] : (b[n/2-1]+b[n/2])/2; };
+  const m = locate(med(f.bl), med(f.br), trim);
+  let fx = NaN, fy = NaN;
+  if (m.ok) {
+    if (!isFinite(f.xF)) { f.xF = m.x; f.yF = m.y; } else { f.xF += FILT.AX*(m.x-f.xF); f.yF += FILT.AY*(m.y-f.yF); }
+    fx = f.xF; fy = f.yF;
+  }
+  S.samples.push({t, L, R, ...raw, fx, fy, fok: m.ok, freason: m.reason});
+  while (S.samples.length > 3000) S.samples.shift();
+}
+
+// ===================== 訊息處理 =====================
+function touch(name){
+  const tp = S.topics[name], t = now();
+  if (tp.last) { tp.gaps.push(t - tp.last); if (tp.gaps.length > 60) tp.gaps.shift(); }
+  tp.last = t; tp.count++;
+}
+function onMessage(name, text){
+  touch(name);
+  const t = now();
+  if (name === 'uwb_mon' && text.includes(';')) {
+    // V11.3 批次格式 "L,R;L,R;..."：依序展開，時間往回推 100ms/筆
+    const parts = text.trim().split(';');
+    const tp = S.topics.uwb; const n = parts.length;
+    parts.forEach((pp, i) => {
+      const m = pp.match(/^(-?[\d.]+),(-?[\d.]+)$/); if (!m) return;
+      addSample(t - (n-1-i)*100, parseFloat(m[1]), parseFloat(m[2]));
+    });
+    if (tp.last) for (let i=0;i<n;i++) { tp.gaps.push((t - tp.last)/n); if (tp.gaps.length > 60) tp.gaps.shift(); }
+    tp.last = t; tp.count += n;
+    while (S.samples.length > 3000) S.samples.shift();
+    return;
+  }
+  if (name === 'uwb' || name === 'uwb_mon') {
+    if (name === 'uwb_mon') touch('uwb');
+    const m = text.trim().match(/^(-?[\d.]+),(-?[\d.]+)$/);
+    if (!m) { log('w', `uwb 格式錯誤（Banana 會直接丟棄）："${text.slice(0,40)}"`); return; }
+    addSample(t, parseFloat(m[1]), parseFloat(m[2]));
+  } else if (name === 'status') {
+    let j; try { j = JSON.parse(text); } catch(e) { log('w','status JSON 解析失敗（可能被截斷）'); return; }
+    if (!S.everStatus) log('i', `收到第一筆 status，韌體：${j.fw || 'V10.2（無 fw 欄位）'}`);
+    S.everStatus = true;
+    S.status = j; S.statusT = t;
+    if (Array.isArray(j.cal) && j.cal.length === 4) {   // V11.5+：校正係數以韌體回報為準
+      const [a,b,c,d] = j.cal;
+      if (a!==CFG.A0_SLOPE || b!==CFG.A0_OFFSET_CM || c!==CFG.A1_SLOPE || d!==CFG.A1_OFFSET_CM) {
+        Object.assign(CFG, {A0_SLOPE:a, A0_OFFSET_CM:b, A1_SLOPE:c, A1_OFFSET_CM:d});
+        syncCfgBox(); log('i', `校正係數改用韌體回報值：A0 ${a}/${b}，A1 ${c}/${d}`);
+      }
+    }
+    S.outs.push({t, ch1:j.ch1, ch2:j.ch2, mode:j.mode, ready:j.uwb_ready});
+    if (S.outs.length > 1500) S.outs.shift();
+    if (S.lastMode !== null && j.mode !== S.lastMode) {
+      S.modeChanges.push(t); log('i', `模式 ${S.lastMode} → ${j.mode}（CH5=${j.ch5}）`);
+    }
+    S.lastMode = j.mode;
+  } else if (name === 'tag_status') {
+    let j; try { j = JSON.parse(text); } catch(e) { log('w','tag_status JSON 解析失敗'); return; }
+    if (!S.tag) log('i', `收到第一筆 tag_status，韌體：${j.fw}`);
+    S.tag = j; S.tagT = t;
+  } else if (name === 'follow_enable') {
+    const v = text.trim();
+    if (S.enable !== v) log('i', `follow_enable → ${v}`);
+    S.enable = v; S.enableT = t;
+  }
+}
+
+// ===================== MQTT =====================
+const lib = document.getElementById('libState');
+function loadMqtt(cb){
+  if (window.mqtt) return cb();
+  const srcs = ['https://unpkg.com/mqtt@5/dist/mqtt.min.js','https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js'];
+  let i = 0;
+  const tryNext = () => {
+    if (i >= srcs.length) { lib.textContent = 'mqtt.js 載入失敗（需要網路）'; return; }
+    const s = document.createElement('script'); s.src = srcs[i++];
+    s.onload = () => { lib.textContent = ''; cb(); };
+    s.onerror = tryNext; document.head.appendChild(s);
+  };
+  lib.textContent = '載入 mqtt.js…'; tryNext();
+}
+function setPill(){
+  const p = document.getElementById('connPill');
+  if (S.demo) { p.className='pill demo'; p.textContent='模擬中'; }
+  else if (S.connected) { p.className='pill on'; p.textContent='已連線'; }
+  else { p.className='pill off'; p.textContent= S.client ? '連線中…' : '未連線'; }
+  document.getElementById('btnConn').textContent = S.client ? '中斷' : '連線';
+}
+function prefix(){ return document.getElementById('prefix').value.replace(/\/+$/,''); }
+function connect(){
+  if (S.client) { S.client.end(true); S.client = null; S.connected = false; setPill(); log('i','已中斷'); return; }
+  stopDemo();
+  loadMqtt(() => {
+    const url = document.getElementById('url').value.trim();
+    const pre = prefix();
+    log('i', `連線 ${url} …`);
+    const c = mqtt.connect(url, {clientId:'diag-'+Math.random().toString(16).slice(2,10), keepalive:30, reconnectPeriod:3000, connectTimeout:8000});
+    S.client = c; setPill();
+    c.on('connect', () => {
+      S.connected = true; S.connT = now(); resetTopics(); S.status = null; S.tag = null; S.enable = null; S.everStatus = false; setPill();
+      log('i', '已連上 broker，訂閱 ' + pre + '/{status,uwb,uwb_mon,follow_enable,tag_status}');
+      c.subscribe(TOPIC_NAMES.map(n => `${pre}/${n}`));
+      // 自我回音測試：判斷「Banana 斷」還是「本頁連線卡住」
+      S.pingTopic = `${pre}/diag_ping/${Math.random().toString(16).slice(2,8)}`;
+      c.subscribe(S.pingTopic);
+      clearInterval(S.pingTimer);
+      S.pingTimer = setInterval(() => { if (S.client && S.connected) S.client.publish(S.pingTopic, String(Date.now())); }, 2000);
+    });
+    c.on('message', (topic, payload, packet) => {
+      if (topic === S.pingTopic) { S.lastEcho = now(); S.echoRtt = Date.now() - parseInt(payload.toString()); return; }
+      const name = topic.slice(pre.length+1);
+      if (!TOPIC_NAMES.includes(name)) return;
+      if (packet && packet.retain) {
+        S.retained[name] = payload.toString();
+        log('w', `忽略 ${name} 的 retained 舊訊息（broker 保存的，不是設備現在送的）："${payload.toString().slice(0,60)}…"`);
+        return;
+      }
+      onMessage(name, payload.toString());
+    });
+    c.on('close', () => { if (S.connected) log('w','與 broker 斷線'); S.connected = false; setPill(); });
+    c.on('error', e => log('e', 'MQTT 錯誤：' + (e && e.message || e)));
+  });
+}
+
+// ===================== 模擬資料（不會發布到 broker） =====================
+function startDemo(){
+  if (S.client) { S.client.end(true); S.client = null; S.connected = false; }
+  S.demo = true; S.connT = now(); resetTopics(); setPill(); log('i','模擬模式：資料只在本頁產生，不會送到機器人');
+  let k = 0, out1 = CFG.CH1_CENTER, out2 = CFG.CH2_CENTER;
+  const noise = () => (Math.random()-0.5)*6;
+  const slantFrom = (x,y,ax) => Math.hypot(x-ax, y, CFG.UWB_HEIGHT_DIFF_CM);
+  S.demoTimer = setInterval(() => {
+    k++;
+    const tt = k*0.12;
+    const x = 70*Math.sin(tt/4), y = 200 + 60*Math.sin(tt/7);
+    // 反推原始值（加上 A0/A1 各自的偏差）
+    const dl = slantFrom(x,y,-CFG.BASELINE_CM/2) + noise(), dr = slantFrom(x,y,CFG.BASELINE_CM/2) + noise();
+    const L = (dl - CFG.A0_OFFSET_CM)/CFG.A0_SLOPE, R = (dr - CFG.A1_OFFSET_CM)/CFG.A1_SLOPE;
+    if (k % 50 !== 0) onMessage('uwb', `${L.toFixed(1)},${R.toFixed(1)}`); // 偶爾掉包
+    if (k % 4 === 0) onMessage('follow_enable','ON');
+    if (k % 3 === 0) {
+      const last = S.samples[S.samples.length-1];
+      let ts = CFG.CH1_CENTER, th = CFG.CH2_CENTER;
+      if (last && last.ok) {
+        const fe = last.y - CFG.TARGET_Y_CM;
+        if (fe > CFG.Y_DEADBAND_CM) th += Math.min(25, 0.4*(fe-CFG.Y_DEADBAND_CM));
+        if (Math.abs(last.x) > CFG.X_DEADBAND_CM) ts += (last.x<0?1:-1)*Math.min(30, 0.35*(Math.abs(last.x)-CFG.X_DEADBAND_CM));
+      }
+      out1 += Math.max(-5, Math.min(5, Math.round(ts)-out1));
+      out2 += Math.max(-5, Math.min(5, Math.round(th)-out2));
+      onMessage('status', JSON.stringify({mode:'FOLLOW', rc_ch1:1503, rc_ch2:1492, ch5:1100, ch1:out1, ch2:out2,
+        uwb_ready:!!(last&&last.ok), follow_request:true, uwb_l_cm:last?last.L:-1, uwb_r_cm:last?last.R:-1,
+        x_cm:last?last.x:-999, y_cm:last?last.y:-999, cal_a0_cm:last?last.cl:-1, cal_a1_cm:last?last.cr:-1,
+        a1_trim_cm:0, center_capture:false, center_n:0, pairs_received:k, geometry_rejected:0, position_reason:last?last.reason:'NO_DATA',
+        fw:'V10.3-diag(demo)', follow_motor_enabled:true, throttle_sign:1, good_samples:3, uwb_age_ms:60, rc_valid:'111', rssi:-58, uptime_s:Math.round(tt)}));
+    }
+    if (k % 8 === 0) onMessage('tag_status', JSON.stringify({fw:'tag-mqtt-v1(demo)', enabled:true, always:false, on_age_ms:120, enable_msgs:k/4|0,
+      a0:{ok:k,to:k/40|0,err:0,mis:0,stuck:0,oor:0,last:L}, a1:{ok:k,to:k/25|0,err:0,mis:0,stuck:0,oor:0,last:R},
+      pairs_pub:k, pairs_drop:k/50|0, pub_fail:0, rate_hz:8.2, pair_span_ms:9, max_span_ms:14, rssi:-61, heap:180000, uptime_s:Math.round(tt)}));
+  }, 120);
+}
+function stopDemo(){ if (S.demoTimer) clearInterval(S.demoTimer); S.demoTimer = null; if (S.demo) log('i','模擬結束'); S.demo = false; setPill(); }
+
+// ===================== 統計 =====================
+function stats(arr){
+  const v = arr.filter(isFinite); if (!v.length) return {n:0, mean:NaN, sd:NaN, min:NaN, max:NaN};
+  const mean = v.reduce((a,b)=>a+b,0)/v.length;
+  const sd = Math.sqrt(v.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,v.length-1));
+  return {n:v.length, mean, sd, min:Math.min(...v), max:Math.max(...v)};
+}
+// 高頻抖動：相鄰差分的標準差 / √2，不受人慢慢走動影響
+function jitter(arr){
+  const v = arr.filter(isFinite); const d = [];
+  for (let i=1;i<v.length;i++) d.push(v[i]-v[i-1]);
+  const s = stats(d); return {n:s.n, sd: s.sd/Math.SQRT2};
+}
+function windowSamples(ms){ const t0 = now()-ms; return S.samples.filter(s => s.t >= t0); }
+function topicInfo(name){
+  const tp = S.topics[name]; const g = tp.gaps.slice(-30);
+  const meanGap = g.length ? g.reduce((a,b)=>a+b,0)/g.length : NaN;
+  return {count:tp.count, age: tp.last ? now()-tp.last : Infinity, hz: isFinite(meanGap)&&meanGap>0 ? 1000/meanGap : 0, maxGap: g.length ? Math.max(...g) : NaN};
+}
+
+// ===================== 診斷規則 =====================
+function diagnose(){
+  const D = []; const add = (lv,title,ev,fix) => D.push({lv,title,ev,fix});
+  const live = S.connected || S.demo;
+  if (!live) { add('err','尚未連上 MQTT broker','', '按「連線」。若連不上：mqttgo.io 的 WebSocket 埠可能不是 8000，請改成 broker 公告的 ws 位址；用 https 網頁開啟時必須改 wss://。也可先按「模擬資料」確認本頁功能。'); return D; }
+  const since = now() - S.connT;
+  const st = S.status, tg = S.tag;
+  const tS = topicInfo('status'), tU = topicInfo('uwb'), tE = topicInfo('follow_enable'), tT = topicInfo('tag_status');
+
+  // --- Banana 控制器 ---
+  const echoAge = S.lastEcho ? now() - S.lastEcho : Infinity;
+  if (S.connected && since > 6000 && echoAge > 6000) {
+    add('err','本頁與 broker 的連線卡住了（自我回音測試失敗）', `最後一次回音 ${isFinite(echoAge)?fmt(echoAge/1000,0)+' s 前':'從未收到'}`,
+      '問題在這台電腦的網路，不是機器人。按「中斷」再「連線」；若反覆發生，檢查電腦 WiFi。');
+  } else if (tS.age > 3000 && since > 3000 && S.connected && tS.count > 0) {
+    add('err','Banana 的 MQTT 連線中斷（診斷頁本身仍連著）', `Banana 所有 topic 在 ${fmt(tS.age/1000,0)} s 前同時停止`,
+      `本頁自我回音正常（${fmt(S.echoRtt,0)} ms），所以是 Banana 端斷線。跟隨走 ESP-NOW 不受影響。看 Banana Serial：有 "MQTT DROPPED state=…" 就是 broker 連線斷了（V11.3+ 會 5 s 自動重連）；若連 "MQTT connect failed" 都一直出現，是熱點沒有網路；Serial 完全沒輸出代表 Banana 斷電或重開機。`);
+  } else if (tS.age > 3000 && since > 3000) {
+    if (tE.age < 3000) add('err','收得到 follow_enable 心跳，但收不到 status',
+      `follow_enable ${fmt(tE.hz)} Hz；status 0 筆`,
+      'Banana 有連上 MQTT，但 status 沒送出去。V10.2 的 status JSON 約 450 bytes，超過 PubSubClient 預設 256 bytes 緩衝，publish() 會靜默失敗。請燒 V10.3-diag（已加 setBufferSize(1024)）。');
+    else add('err','完全收不到 Banana 控制器訊息', `status/follow_enable 皆無（已連線 ${fmt(since/1000,0)} s）`,
+      '檢查 Banana 電源、WiFi（SSID Shunliang）、Serial 是否印出 "MQTT connected"。另外確認本頁 Topic 前綴與韌體相同。');
+  }
+  if (st) {
+    if (st.rc_valid && st.rc_valid.includes('0')) add('warn','RC 接收機訊號不完整', `rc_valid(CH1,CH2,CH5)=${st.rc_valid}`, 'pulseIn 逾時或超出 900–2100µs。CH5 無效時會強制 STOP。檢查接收機供電、訊號線與共地。');
+    if (st.mode !== 'FOLLOW') add('info',`目前模式 ${st.mode}，不是 FOLLOW`, `CH5 = ${st.ch5} µs（FOLLOW 需 < ${CFG.CH5_FOLLOW_MAX}）`, 'Tag 只有在 Banana 送 ON 心跳時才測距；切到 FOLLOW 才會有 uwb 資料。');
+    const recentChanges = S.modeChanges.filter(t => now()-t < 10000).length;
+    if (recentChanges >= 4) add('warn','模式在 10 秒內切換 ' + recentChanges + ' 次', `CH5 = ${st.ch5}`, 'CH5 撥桿值靠近 1300 或 1700 門檻，或訊號抖動。每次切換都會停車並清空 goodSamples。');
+    if (st.center_capture) add('info','中心對位擷取中', `${st.center_n}/15`, 'Tag 保持靜止在正前方中心線。');
+  }
+
+  // --- 心跳 / Tag ---
+  const followOn = S.enable === 'ON' && tE.age < 1500;
+  const isEspnow = st && st.link === 'espnow';
+  if (isEspnow) {
+    if (!st.espnow_ok) add('err','Banana 的 ESP-NOW 沒有初始化成功', '', '看 Banana Serial 的 "ESP-NOW init" 訊息。');
+    if (st.espnow_age_ms < 0 && since > 5000) add('err','Banana 從未收到 Tag 的 ESP-NOW 封包',
+      `Banana ESP-NOW 頻道 ${st.espnow_ch}`,
+      'Tag 沒上電、沒燒 uwb_tag_espnow_v2，或 Tag 還在掃頻道。看 Tag Serial：應出現 "LINKED to Banana ... on channel ' + st.espnow_ch + '"。一直沒 LINKED → 兩邊距離太遠或 Banana 心跳沒送出。');
+    else if (st.espnow_age_ms > 2000) add('err','Tag 的 ESP-NOW 封包中斷', `最後一筆 ${fmt(st.espnow_age_ms/1000,1)} s 前`, 'Tag 斷電/重開，或 Banana 換了 WiFi 頻道（熱點重連），Tag 會自動重新掃描，約 3 秒內恢復。');
+    if (st.espnow_rssi && st.espnow_rssi < -80) add('warn','Tag→Banana ESP-NOW 訊號弱', `RSSI ${st.espnow_rssi} dBm`, '檢查 ESP32 天線方向、是否被金屬車殼遮住。');
+    if (st.espnow_pairs > 50 && st.espnow_seq_gaps / st.espnow_pairs > 0.1) add('warn','ESP-NOW 掉包偏多', `掉 ${st.espnow_seq_gaps} / 收 ${st.espnow_pairs}`, '常見原因：Banana WiFi 省電（V11 已關）、2.4GHz 干擾、天線被遮。');
+  }
+  if (st && tg && tg.channel && st.espnow_ch && tg.channel !== st.espnow_ch) add('err',`Tag 與 Banana 不在同一個頻道（Tag ch${tg.channel}、Banana ch${st.espnow_ch}）`,
+    '相鄰頻道只收得到部分封包，會大量掉包、車子走走停停', 'Tag v2.6 會依 Banana 心跳裡的頻道自動切換；請確認兩邊都燒了 v2.6 / V11.9。');
+  if (st && st.espnow_pairs > 50 && st.espnow_seq_gaps / (st.espnow_pairs + st.espnow_seq_gaps) > 0.2) add('err','Tag→Banana 距離資料掉包過多，不要開馬達',
+    `掉 ${st.espnow_seq_gaps}、收 ${st.espnow_pairs}（${fmt(st.espnow_seq_gaps/(st.espnow_pairs+st.espnow_seq_gaps)*100,0)}%）`, '先解決頻道或干擾問題；掉包 > 20% 時資料常超過 0.6 s 中斷，車子會走走停停。');
+  if (st && st.hb_unicast === false && st.espnow_pairs > 0) add('warn','心跳還沒切到單播', '', 'Banana 收到 Tag 封包後應該自動加 peer，看 Banana Serial 是否印出 "Tag peer ... added"。');
+  if (st && st.hb_uc_sent > 50 && st.hb_uc_fail / st.hb_uc_sent > 0.1) add('warn','Banana→Tag 心跳送達率偏低',
+    `失敗 ${st.hb_uc_fail} / ${st.hb_uc_sent}（${fmt(st.hb_uc_fail/st.hb_uc_sent*100,0)}%）`, '單播已含自動重送仍失敗，代表 2.4GHz 干擾或距離/遮擋。');
+  if (st && st.wifi_drops > 0) add('warn',`Banana 與熱點斷線過 ${st.wifi_drops} 次`, `目前頻道 ${st.espnow_ch}`,
+    '熱點斷線重連時，ESP-NOW 頻道可能改變，Tag 會短暫失聯（v2.4 會自動重新連上）。改善：熱點放近一點、手機熱點關閉省電/自動關閉、或改用固定頻道的路由器。');
+  if (st && st.mqtt_drops > 0) add('info',`Banana MQTT 曾掉線 ${st.mqtt_drops} 次`,
+    `最後一次在開機 ${st.mqtt_last_drop_s} s，state=${st.mqtt_last_drop_state}（-4 逾時、-3 連線遺失）`,
+    '公共 broker 不穩或流量限制。只影響監控，不影響跟隨。若太頻繁可改用自架 broker（例如筆電跑 Mosquitto）。');
+  if (st && st.hb_max_gap_ms !== undefined) {
+    if (st.hb_max_gap_ms > 350) add('warn','Banana 心跳間隔過長（主迴圈被卡住）',
+      `心跳最大間隔 ${st.hb_max_gap_ms} ms、主迴圈最長 ${st.loop_max_ms} ms（應 < 150 ms）`,
+      '常見原因：MQTT publish/重連阻塞、RC pulseIn 逾時（接收機沒訊號時每通道最多 25 ms）。Tag 會因此短暫 RANGING DISABLED。');
+    S.ch5InvHist = S.ch5InvHist || [];
+    S.ch5InvHist.push({t:now(), v:st.ch5_invalid}); S.ch5InvHist = S.ch5InvHist.filter(h => now()-h.t < 10000);
+    const d5 = S.ch5InvHist.length > 1 ? S.ch5InvHist[S.ch5InvHist.length-1].v - S.ch5InvHist[0].v : 0;
+    if (d5 > 0) add('warn','CH5 讀取瞬間無效', `近 10 秒 ${d5} 次`, 'CH5 無效會被判成 STOP，Banana 送 OFF 心跳、停車並清空 goodSamples。檢查 CH5 訊號線、接收機供電與共地。');
+    if (st.outlier_rejected > 0) add('info','UWB 離群值已濾除', `累計 ${st.outlier_rejected} 筆（單一 anchor 100ms 內跳 > 40 cm）`,
+      '少量正常；若大多來自 A1，代表 A1 常被遮擋（人體/車殼），可調整 Tag 佩戴位置或 Anchor 天線朝向。');
+  }
+  if (!tg && since > 5000 && isEspnow) add('info','診斷頁沒有 tag_status', 'ESP-NOW 架構下 tag_status 由 Banana 代轉', '只要 Banana 有收到 Tag 統計且 MQTT 連著就會出現；不影響跟隨。');
+  if (!tg && since > 5000 && !isEspnow) add('err','收不到 tag_status：Tag 沒有連上 MQTT broker',
+    'tag_status 每秒都會送（與 FOLLOW 無關），完全沒有代表 Tag 不在線上',
+    '用 USB 接 Tag 開 Serial Monitor（115200）按 RST，看停在哪一行：沒有 "WiFi OK" → WiFi（只支援 2.4GHz、訊號）；有 "DW3000: INIT_FAILED" → 舊版 v1 會卡死在這裡，請燒 v1.1；有 "MQTT connect FAILED" → broker 連線問題。另確認燒的是 uwb_tag_mqtt 而不是舊的 ESP-NOW 版。');
+  if (tg && tg.dw && tg.dw !== 'OK') add('err',`Tag 的 DW3000 初始化失敗：${tg.dw}`, '',
+    'IDLE_FAILED/INIT_FAILED 通常是 SPI 問題：PIN_SS 試 4 或 15、檢查 RST(27)、IRQ(34)、3.3V 供電與共地。舊的 Tag 程式若能用，代表接腳設定要跟它一樣。');
+  if (followOn) {
+    if (tU.age > 2000 && since > 3000 && !isEspnow) {   // ESP-NOW 版由上方「封包中斷」規則處理
+      let ev = `uwb 最後一筆 ${isFinite(tU.age)? fmt(tU.age/1000,1)+' s 前':'從未收到'}`;
+      let fix = '';
+      if (tg) {
+        ev += `；Tag enabled=${tg.enabled}, on_age=${tg.on_age_ms} ms, rate=${tg.rate_hz} Hz, drop=${tg.pairs_drop}`;
+        if (tg.dw && tg.dw !== 'OK') fix = 'DW3000 沒初始化成功，見上一則。';
+        else if (!tg.enabled) fix = 'Tag 沒收到 ON 心跳（訂閱失敗或 broker 不同）。檢查 Tag Serial 是否印 "subscribed follow_enable"。';
+        else fix = '看下方 A0/A1 測距統計，哪一顆 timeout 多就是哪一顆 Anchor 有問題。';
+      }
+      add('err','FOLLOW 已開啟，但沒有 UWB 資料', ev, fix);
+    }
+  }
+  if (tg) {
+    const RR = {1:'POWERON',3:'SOFTWARE',4:'PANIC(當機)',5:'INT_WDT',6:'TASK_WDT',7:'WDT',8:'DEEPSLEEP',9:'BROWNOUT(電壓不足)',2:'EXT_PIN'};
+    if (tg.brownouts > 0) add('err',`Tag 發生 ${tg.brownouts} 次電壓不足重開機（brownout）`, `開機次數 ${tg.boot_count}`,
+      'Tag 供電撐不住 DW3000 + WiFi 發射的瞬間電流。改用短粗 USB 線直插電腦（不經 Hub）、或用行動電源/電池供電，必要時在 3.3V 加 100–470µF 電容。COM 埠消失通常就是這個原因。');
+    else if (tg.boot_count > 1) add('warn',`Tag 自上次斷電後重開機 ${tg.boot_count-1} 次`, `最後原因：${RR[tg.reset_reason]||tg.reset_reason}`,
+      'PANIC/WDT 表示程式當機，把 Tag Serial 的錯誤訊息貼給 Claude。');
+    if (S.lastTagUptime !== undefined && tg.uptime_s + 3 < S.lastTagUptime) log('w', `Tag 重開機了（uptime ${S.lastTagUptime}s → ${tg.uptime_s}s）`);
+    S.lastTagUptime = tg.uptime_s;
+    const chk = (k, name) => {
+      const a = tg[k]; if (!a) return;
+      const tries = a.ok+a.to+a.err+a.mis+a.stuck+a.oor;
+      if (tries < 20) return;
+      const okR = a.ok/tries;
+      if (a.ok === 0) add('err',`Anchor ${name} 完全沒有回應`, `ok=0, timeout=${a.to}, err=${a.err}`, `${name} 沒上電、ID 燒錯（MY_ANCHOR_ID）、PIN_SS 不對（4/15），或還在跑舊版有 50ms break 的 receiver 程式。看該 Anchor Serial 的 resp= 是否增加。`);
+      else if (okR < 0.8) add('warn',`Anchor ${name} 成功率 ${fmt(okR*100,0)}%`, `ok=${a.ok} to=${a.to} err=${a.err} mis=${a.mis} stuck=${a.stuck} oor=${a.oor}`, '常見原因：人體遮擋（Tag 掛身上背對機器人）、天線方向、距離太遠或金屬反射。mis>0 代表收到另一顆 Anchor 的回應或 ID 重複。');
+      if (a.stuck > 0) add('warn',`Anchor ${name} 量測卡住 ${a.stuck} 次`, '', 'DW3000 RX timeout 沒觸發，軟體保護介入。檢查 SPI 接線與供電。');
+    };
+    chk('a0','A0（左）'); chk('a1','A1（右）');
+    if (tg.rssi < -78) add('warn','Tag WiFi 訊號弱', `RSSI ${tg.rssi} dBm`, 'MQTT 延遲會變大，造成 UWB_TIMEOUT 停車。改用近一點的 AP 或手機熱點。');
+    if (tg.pub_fail > 0) add('warn','Tag MQTT publish 失敗', `pub_fail=${tg.pub_fail}`, 'WiFi/broker 不穩。');
+    if (tT.age > 5000) add('warn','tag_status 超過 5 秒沒更新', '', 'Tag 可能當機或斷線。');
+  }
+  if (st && st.rssi !== undefined && st.rssi < -78) add('warn','Banana WiFi 訊號弱', `RSSI ${st.rssi} dBm`, '');
+
+  // --- UWB 資料流 ---
+  if (tU.count > 10) {
+    if (tU.maxGap > CFG.UWB_TIMEOUT_MS && st && st.link === 'espnow') add('info','網頁看到的 UWB 間隔偏大（MQTT 轉發延遲）',
+      `最大間隔 ${fmt(tU.maxGap,0)} ms`, 'ESP-NOW 架構下這是 Banana→MQTT→網頁的延遲，不代表控制端漏資料；控制端是否掉包請看 status 的 espnow_seq_gaps。');
+    else if (tU.maxGap > CFG.UWB_TIMEOUT_MS) add('warn','UWB 資料間隔超過控制器逾時', `最大間隔 ${fmt(tU.maxGap,0)} ms > ${CFG.UWB_TIMEOUT_MS} ms`, '超過就會 motorStop()，車子走走停停。檢查 WiFi 延遲、Tag 測距失敗率；必要時把 UWB_TIMEOUT_MS 放寬或提高 Tag 更新率。');
+    if (tU.hz < 3 && tU.age < 2000) add('warn','UWB 更新率偏低', `${fmt(tU.hz)} Hz`, '跟隨控制建議 ≥ 5 Hz。');
+  }
+
+  // --- 幾何 / 位置 ---
+  const w = windowSamples(5000);
+  if (w.length >= 5) {
+    const rej = w.filter(s => !s.ok);
+    const byReason = {}; rej.forEach(s => byReason[s.reason] = (byReason[s.reason]||0)+1);
+    if (byReason.GEOMETRY) {
+      const diffs = stats(w.map(s => s.cl - s.cr));
+      add('err',`幾何無解（GEOMETRY）${byReason.GEOMETRY}/${w.length} 筆`,
+        `校正後 A0−A1 差 平均 ${fmt(diffs.mean)} cm、最大 ${fmt(Math.max(Math.abs(diffs.min),Math.abs(diffs.max)))} cm；基線只有 ${CFG.BASELINE_CM} cm`,
+        '兩顆 Anchor 的距離差在物理上不可能大於基線 35 cm（等號只出現在正側方）。代表其中一顆有額外偏差：人體遮擋造成 NLOS 正偏差最常見；其次是兩顆 Anchor 校正係數或天線延遲不一致。先把 Tag 放正前方做中心對位（Serial 送 c）。');
+    }
+    if (byReason.TOO_CLOSE_H) add('warn',`斜距小於高度差（TOO_CLOSE_H）${byReason.TOO_CLOSE_H} 筆`,
+      `UWB_HEIGHT_DIFF_CM = ${CFG.UWB_HEIGHT_DIFF_CM}`, '人太靠近，或高度差設定比實際大。請實際量 Tag 與 Anchor 的高度差並更新韌體與本頁參數。');
+    if (byReason.OUT_OF_BOUNDS) {
+      const ob = rej.filter(s => s.reason==='OUT_OF_BOUNDS');
+      const near = ob.filter(s=>s.y<CFG.MIN_Y_CM).length, far = ob.filter(s=>s.y>CFG.MAX_Y_CM).length, side = ob.filter(s=>Math.abs(s.x)>CFG.MAX_ABS_X_CM).length;
+      add('info',`位置超出允許範圍 ${ob.length} 筆`, `太近 ${near}、太遠 ${far}、太偏 ${side}`, `允許範圍 y ${CFG.MIN_Y_CM}~${CFG.MAX_Y_CM}、|x| ≤ ${CFG.MAX_ABS_X_CM}，超出會停車（設計行為）。`);
+    }
+    const ok = w.filter(s => s.ok);
+    const sL = stats(w.map(s=>s.cl)), sR = stats(w.map(s=>s.cr)), sx = stats(ok.map(s=>s.x)), sy = stats(ok.map(s=>s.y));
+    const dbar = (sL.mean+sR.mean)/2, amp = dbar/CFG.BASELINE_CM;
+    const still = document.getElementById('chkCenter').checked;
+    if (sL.n >= 20 && Math.max(sL.sd, sR.sd) > 5 && Math.max(sL.sd, sR.sd) > 2.5*Math.min(sL.sd, sR.sd))
+      add('warn', `${sL.sd > sR.sd ? 'A0（左）' : 'A1（右）'} 的測距抖動明顯比另一顆大`,
+        `σ(A0)=${fmt(sL.sd)} cm、σ(A1)=${fmt(sR.sd)} cm`,
+        '一顆穩一顆亂跳，x 就會左右擺。依序試：(1) Tag 原地轉 90° 看抖動是否換邊（Tag 天線方向）；(2) 檢查這顆 Anchor 天線前方有無金屬/線材遮擋；(3) 兩片 Anchor 板子對調位置，看抖動跟著板子還是跟著位置。');
+    if (still && (sL.sd > 6 || sR.sd > 6)) add('warn','靜止時測距抖動偏大', `σ(A0)=${fmt(sL.sd)} cm, σ(A1)=${fmt(sR.sd)} cm`, '靜止時 σ 應在 2–5 cm。檢查多重路徑（牆、金屬）、天線遮擋或供電雜訊。');
+    const jx = jitter(ok.map(s=>s.x));
+    const jf = jitter(w.filter(s=>isFinite(s.fx)).map(s=>s.fx));
+    if (jf.n >= 8 && jf.sd > 8) add('warn','濾波後 x 仍在抖動，車子可能左右擺頭',
+      `濾波後相鄰抖動 ≈ ${fmt(jf.sd)} cm（原始 ${fmt(jx.sd)} cm），X 死區 ${CFG.X_DEADBAND_CM} cm`,
+      '殘餘抖動來自單邊遮擋。改善：Tag 戴在胸前正面、天線朝機器人；兩顆 Anchor 架高避開車殼；最有效的是把基線從 35 cm 加大到 60~80 cm（抖動約可再減半）。');
+    if (jx.n >= 8 && jx.sd > 12) add('info','原始 x 抖動大（已由濾波處理）',
+      `相鄰樣本抖動 σx ≈ ${fmt(jx.sd)} cm（已扣除人走動的慢變化）；放大倍率 d̄/B ≈ ${fmt(amp)}（測距誤差 1 cm → x 誤差約 ${fmt(amp*1.4)} cm）`,
+      `x ≈ d̄·(dL−dR)/B，基線 35 cm 在 ${fmt(dbar,0)} cm 距離時放大約 ${fmt(amp,1)} 倍，這是幾何限制不是程式錯誤。對策：x 加一階低通或中位數濾波、提高 X_DEADBAND、或加大 Anchor 間距。`);
+    if (still && sx.n >= 10 && Math.abs(sx.mean) > CFG.X_DEADBAND_CM) {
+      const trim = st && isFinite(st.a1_trim_cm) ? st.a1_trim_cm : 0;
+      add('warn','Tag 在中心線上，但 x 平均偏離', `x̄ = ${fmt(sx.mean)} cm，目前 A1 trim = ${fmt(trim,2)} cm；校正後 A0−A1 平均 ${fmt(sL.mean-sR.mean,2)} cm`,
+        `會導致車子一直往${sx.mean<0?'左':'右'}偏。在 FOLLOW 模式、ENABLE_FOLLOW_MOTOR=false 下送 Serial "c" 做 15 筆中心對位；若 |trim| > 35 cm 會被拒絕，代表硬體/擺放有問題。`);
+    }
+    if (still && sy.n >= 10) add('info','靜止統計', `x̄=${fmt(sx.mean)} σx=${fmt(sx.sd)}；ȳ=${fmt(sy.mean)} σy=${fmt(sy.sd)} cm`, '若你有實際量測的 y，可與 ȳ 比較，差太多代表校正係數或高度差設定不準。');
+  }
+
+  // --- 輸出行為 ---
+  if (st && st.mode === 'FOLLOW') {
+    const motorFlag = st.follow_motor_enabled;
+    const last = S.samples[S.samples.length-1];
+    const recentOuts = S.outs.filter(o => now()-o.t < 3000);
+    const allCenter = recentOuts.length > 5 && recentOuts.every(o => o.ch1===CFG.CH1_CENTER && o.ch2===CFG.CH2_CENTER);
+    if (motorFlag === false) add('info','ENABLE_FOLLOW_MOTOR = false（安全鎖）', '', '輸出固定在中位是正常的。架空驗證方向後再改 true。');
+    else if (allCenter && st.uwb_ready && last && last.ok && last.y > CFG.TARGET_Y_CM + CFG.Y_DEADBAND_CM)
+      add('warn','位置有效、人在遠處，但輸出一直在中位', `y=${fmt(last.y)} cm, ready=${st.uwb_ready}`, motorFlag===undefined ? 'V10.2 無法從 status 看出 ENABLE_FOLLOW_MOTOR；很可能仍是 false。V10.3-diag 會回報這個旗標。' : '檢查 goodSamples 與 uwb_age_ms。');
+    if (st.uwb_ready && last && last.ok) {
+      // 方向一致性：預期 vs 實際
+      const steer = st.ch1 - CFG.CH1_CENTER;
+      if (Math.abs(last.x) > CFG.X_DEADBAND_CM + 10 && steer !== 0) {
+        const sgn = (st.steer_sign === -1) ? -1 : 1;           // V11.10：-1 = 脈寬小為左轉
+        const expectLeft = last.x < 0, outLeft = sgn * steer > 0;
+        if (expectLeft !== outLeft) add('warn','轉向輸出與 Tag 位置方向不一致', `x=${fmt(last.x)} → 應往${expectLeft?'左':'右'}；CH1 偏移 ${steer} µs`, '可能只是 slew-rate 正在回轉（短暫出現屬正常）；若持續出現代表程式極性與硬體不同。');
+      }
+      if (st.ch2 !== CFG.CH2_CENTER && (st.throttle_sign === undefined || st.throttle_sign === 1))
+        add('info','請確認 FOLLOW 油門方向', `CH2 = ${st.ch2}（中位 ${CFG.CH2_CENTER}，FOLLOW 用「加大脈寬 = 前進」）`,
+          '輪子架空，人站 2 m 以上：輪子應該往前轉。若往後轉，把 FOLLOW_THROTTLE_SIGN 改成 -1 重燒。用左邊「實際觀察」按鈕記錄結果。');
+    }
+  }
+
+  if (!D.some(d => d.lv==='err'||d.lv==='warn')) add('ok','目前沒有偵測到異常', `status ${fmt(tS.hz)} Hz、uwb ${fmt(tU.hz)} Hz`, '');
+  const order = {err:0,warn:1,info:2,ok:3};
+  return D.sort((a,b)=>order[a.lv]-order[b.lv]);
+}
+
+// ===================== 畫面 =====================
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function renderDiags(){
+  S.diags = diagnose();
+  const box = document.getElementById('diagList'); box.innerHTML = '';
+  const lab = {err:'錯誤',warn:'注意',info:'資訊',ok:'正常'};
+  for (const d of S.diags) {
+    const el = document.createElement('div'); el.className = 'diag '+d.lv;
+    el.innerHTML = `<b><span class="tag">${lab[d.lv]}</span></b>`;
+    el.querySelector('b').append(d.title);
+    if (d.ev) { const e = document.createElement('div'); e.className='ev'; e.textContent = d.ev; el.append(e); }
+    if (d.fix) { const f = document.createElement('div'); f.className='fix'; f.textContent = '→ ' + d.fix; el.append(f); }
+    box.append(el);
+  }
+}
+function fillTable(id, rows){
+  const t = document.getElementById(id); t.innerHTML = '';
+  for (const [k,v] of rows) { const tr = t.insertRow(); tr.insertCell().textContent = k; tr.insertCell().textContent = v; }
+}
+function renderTables(){
+  const rows = TOPIC_NAMES.map(n => { const i = topicInfo(n); return [n, `${i.count} 筆 · ${fmt(i.hz)} Hz · ${isFinite(i.age)?fmt(i.age/1000,1)+'s 前':'—'} · max gap ${fmt(i.maxGap,0)}ms`]; });
+  fillTable('tTopics', rows);
+  const st = S.status;
+  fillTable('tStatus', st ? Object.entries(st).map(([k,v]) => [k, typeof v==='number' && !Number.isInteger(v) ? v.toFixed(2) : String(v)]) : [['狀態','尚無資料']]);
+  const tg = S.tag;
+  fillTable('tTag', tg ? Object.entries(tg).map(([k,v]) => [k, typeof v==='object'?JSON.stringify(v):String(v)]) : [['狀態','尚無資料（ESP-NOW 版由 Banana 轉發）']]);
+  const w = windowSamples(5000), ok = w.filter(s=>s.ok);
+  const sL = stats(w.map(s=>s.cl)), sR = stats(w.map(s=>s.cr)), sx = stats(ok.map(s=>s.x)), sy = stats(ok.map(s=>s.y));
+  fillTable('tStats', [
+    ['筆數（有效/全部）', `${ok.length}/${w.length}`],
+    ['A0 校正後 mean ± σ', `${fmt(sL.mean)} ± ${fmt(sL.sd)}`],
+    ['A1 校正後 mean ± σ', `${fmt(sR.mean)} ± ${fmt(sR.sd)}`],
+    ['A0−A1 平均差', fmt(sL.mean - sR.mean, 2)],
+    ['x mean ± σ', `${fmt(sx.mean)} ± ${fmt(sx.sd)}`],
+    ['x 相鄰樣本抖動', fmt(jitter(ok.map(s=>s.x)).sd)],
+    ['y mean ± σ', `${fmt(sy.mean)} ± ${fmt(sy.sd)}`],
+    ['x 誤差放大倍率 d̄/B', fmt(((sL.mean+sR.mean)/2)/CFG.BASELINE_CM, 1)]
+  ]);
+  const last = S.samples[S.samples.length-1];
+  document.getElementById('kx').textContent = last ? fmt(isFinite(last.fx) ? last.fx : last.x) : '—';
+  document.getElementById('ky').textContent = last ? fmt(isFinite(last.fy) ? last.fy : last.y) : '—';
+  const kr = document.getElementById('kr'); kr.textContent = last ? last.reason : '—';
+  kr.style.color = last ? (last.ok ? css('--ok') : css('--err')) : '';
+}
+function drawTop(){
+  const c = document.getElementById('top'), g = c.getContext('2d');
+  const W = c.width, H = c.height; g.clearRect(0,0,W,H);
+  const xr = 180, ymax = 380, sc = Math.min(W/(2*xr), (H-40)/ymax);
+  const X = x => W/2 + x*sc, Y = y => H-30 - y*sc;
+  g.strokeStyle = css('--grid'); g.lineWidth = 1; g.font = '12px ui-monospace,monospace'; g.fillStyle = css('--muted');
+  for (let y=0;y<=ymax;y+=50){ g.beginPath(); g.moveTo(0,Y(y)); g.lineTo(W,Y(y)); g.stroke(); g.fillText(y, 4, Y(y)-3); }
+  for (let x=-150;x<=150;x+=50){ g.beginPath(); g.moveTo(X(x),0); g.lineTo(X(x),H); g.stroke(); }
+  // 允許範圍
+  g.strokeStyle = css('--muted'); g.lineWidth = 1.5;
+  g.strokeRect(X(-CFG.MAX_ABS_X_CM), Y(CFG.MAX_Y_CM), 2*CFG.MAX_ABS_X_CM*sc, (CFG.MAX_Y_CM-CFG.MIN_Y_CM)*sc);
+  // 目標帶
+  g.fillStyle = css('--ok'); g.globalAlpha = .15;
+  g.fillRect(X(-CFG.MAX_ABS_X_CM), Y(CFG.TARGET_Y_CM+CFG.Y_DEADBAND_CM), 2*CFG.MAX_ABS_X_CM*sc, 2*CFG.Y_DEADBAND_CM*sc);
+  g.globalAlpha = 1;
+  // x 死區
+  g.setLineDash([5,5]); g.strokeStyle = css('--warn');
+  for (const s of [-1,1]) { g.beginPath(); g.moveTo(X(s*CFG.X_DEADBAND_CM),Y(0)); g.lineTo(X(s*CFG.X_DEADBAND_CM),Y(ymax)); g.stroke(); }
+  g.setLineDash([]);
+  // 機器人
+  g.fillStyle = css('--ink'); g.globalAlpha = .12; g.fillRect(X(-30), Y(0), 60*sc, 30*sc); g.globalAlpha = 1;
+  const B2 = CFG.BASELINE_CM/2;
+  g.fillStyle = css('--a0'); g.beginPath(); g.arc(X(-B2),Y(0),6,0,7); g.fill(); g.fillText('A0', X(-B2)-22, Y(0)+16);
+  g.fillStyle = css('--a1'); g.beginPath(); g.arc(X(B2),Y(0),6,0,7); g.fill(); g.fillText('A1', X(B2)+6, Y(0)+16);
+  // 軌跡（含被拒絕但有 x/y 的點）
+  const pts = S.samples.slice(-80);
+  pts.forEach((p,i) => {
+    if (!isFinite(p.x) || !isFinite(p.y)) return;
+    const a = 0.15 + 0.85*i/pts.length;
+    g.globalAlpha = a; g.strokeStyle = g.fillStyle = p.ok ? css('--accent') : css('--err');
+    g.beginPath(); g.arc(X(p.x), Y(p.y), 4, 0, 7); p.ok ? g.fill() : g.stroke();
+  });
+  g.globalAlpha = 1;
+  // 濾波後軌跡（車子實際用的位置）
+  g.strokeStyle = css('--info'); g.lineWidth = 2; g.beginPath(); let pen = false;
+  for (const p of pts) { if (!isFinite(p.fx)||!isFinite(p.fy)) { pen=false; continue; } pen ? g.lineTo(X(p.fx),Y(p.fy)) : g.moveTo(X(p.fx),Y(p.fy)); pen = true; }
+  g.stroke();
+  const last = S.samples[S.samples.length-1];
+  const lx = last && isFinite(last.fx) ? last.fx : last && last.x, ly = last && isFinite(last.fy) ? last.fy : last && last.y;
+  if (last && isFinite(lx) && isFinite(ly)) {
+    g.strokeStyle = (last.fok ?? last.ok) ? css('--info') : css('--err'); g.lineWidth = 3;
+    g.beginPath(); g.arc(X(lx), Y(ly), 10, 0, 7); g.stroke();
+    g.setLineDash([3,4]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(X(0),Y(0)); g.lineTo(X(lx),Y(ly)); g.stroke(); g.setLineDash([]);
+  }
+}
+function drawSeries(id, series, span=30000){
+  const c = document.getElementById(id), g = c.getContext('2d');
+  const W = c.width, H = c.height; g.clearRect(0,0,W,H);
+  const t1 = now(), t0 = t1 - span;
+  let lo = Infinity, hi = -Infinity;
+  for (const s of series) for (const p of s.data) if (p.t>=t0 && isFinite(p.v)) { lo = Math.min(lo,p.v); hi = Math.max(hi,p.v); }
+  g.font = '11px ui-monospace,monospace'; g.fillStyle = css('--muted');
+  if (!isFinite(lo)) { g.fillText('無資料', 10, H/2); return; }
+  if (hi - lo < 10) { const m=(hi+lo)/2; lo=m-5; hi=m+5; }
+  const pad = (hi-lo)*0.1; lo-=pad; hi+=pad;
+  const X = t => 40 + (t-t0)/span*(W-48), Y = v => 8 + (hi-v)/(hi-lo)*(H-20);
+  g.strokeStyle = css('--grid');
+  for (let i=0;i<=4;i++){ const v = lo+(hi-lo)*i/4; g.beginPath(); g.moveTo(40,Y(v)); g.lineTo(W,Y(v)); g.stroke(); g.fillText(v.toFixed(0), 2, Y(v)+4); }
+  for (const s of series) {
+    g.strokeStyle = css(s.color); g.lineWidth = s.width || 1.6; g.globalAlpha = s.alpha || 1; g.beginPath(); let pen = false, lt = 0;
+    for (const p of s.data) {
+      if (p.t < t0 || !isFinite(p.v)) { pen = false; continue; }
+      if (pen && p.t - lt > 1500) pen = false;  // 斷點
+      pen ? g.lineTo(X(p.t),Y(p.v)) : g.moveTo(X(p.t),Y(p.v)); pen = true; lt = p.t;
+    }
+    g.stroke(); g.globalAlpha = 1;
+  }
+}
+function renderCharts(){
+  const sm = S.samples;
+  drawSeries('cRaw', [{color:'--a0', data:sm.map(s=>({t:s.t,v:s.cl}))},{color:'--a1', data:sm.map(s=>({t:s.t,v:s.cr}))}]);
+  drawSeries('cXY', [{color:'--accent', data:sm.map(s=>({t:s.t,v:s.fy}))},{color:'--warn', data:sm.map(s=>({t:s.t,v:s.x})), alpha:.35},{color:'--info', data:sm.map(s=>({t:s.t,v:s.fx})), width:2.4}]);
+  drawSeries('cOut', [{color:'--info', data:S.outs.map(o=>({t:o.t,v:o.ch1-CFG.CH1_CENTER}))},{color:'--err', data:S.outs.map(o=>({t:o.t,v:o.ch2-CFG.CH2_CENTER}))}]);
+}
+
+// ===================== 觀察紀錄 =====================
+document.querySelectorAll('[data-obs]').forEach(b => b.onclick = () => {
+  const last = S.samples[S.samples.length-1], st = S.status;
+  let exp = '—';
+  if (last && last.ok) {
+    const parts = [];
+    if (last.y > CFG.TARGET_Y_CM + CFG.Y_DEADBAND_CM) parts.push('前進'); else parts.push('不前進');
+    if (Math.abs(last.x) > CFG.X_DEADBAND_CM) parts.push(last.x<0?'左轉':'右轉');
+    exp = parts.join('+');
+  } else if (last) exp = `停車（${last.reason}）`;
+  log('w', `【觀察】車子 ${b.dataset.obs}｜預期 ${exp}｜x=${fmt(last&&last.x)} y=${fmt(last&&last.y)} CH1=${st?st.ch1:'—'} CH2=${st?st.ch2:'—'} mode=${st?st.mode:'—'} motor=${st&&st.follow_motor_enabled!==undefined?st.follow_motor_enabled:'?'}`);
+});
+
+// ===================== 報告 / CSV =====================
+function buildReport(){
+  const L = [];
+  const w = windowSamples(5000), ok = w.filter(s=>s.ok);
+  const sL = stats(w.map(s=>s.cl)), sR = stats(w.map(s=>s.cr)), sx = stats(ok.map(s=>s.x)), sy = stats(ok.map(s=>s.y));
+  L.push(`# 跟隨機器人診斷報告  ${new Date().toLocaleString('zh-TW',{hour12:false})}`);
+  L.push(`來源：${S.demo?'模擬資料':document.getElementById('url').value}  前綴：${prefix()}`);
+  L.push(`韌體：Banana=${S.status?(S.status.fw||'V10.2'):'無資料'}，Tag=${S.tag?S.tag.fw:'無資料'}`);
+  L.push(`情境：Tag 靜止中心線=${document.getElementById('chkCenter').checked}，輪子架空=${document.getElementById('chkWheelsOff').checked}`);
+  L.push('\n## 我的描述'); L.push(document.getElementById('notes').value.trim() || '（未填）');
+  L.push('\n## 自動診斷');
+  for (const d of S.diags) L.push(`- [${d.lv}] ${d.title}${d.ev?'｜'+d.ev:''}${d.fix?'\n  → '+d.fix:''}`);
+  L.push('\n## Topic 健康度');
+  for (const n of TOPIC_NAMES) { const i = topicInfo(n); L.push(`- ${n}: ${i.count} 筆, ${fmt(i.hz)} Hz, 最後 ${isFinite(i.age)?fmt(i.age/1000,1)+'s 前':'—'}, max gap ${fmt(i.maxGap,0)} ms`); }
+  L.push('\n## 最近 5 秒統計（cm）');
+  L.push(`- 筆數 有效/全部 = ${ok.length}/${w.length}`);
+  L.push(`- A0 校正後 ${fmt(sL.mean)} ± ${fmt(sL.sd)}；A1 校正後 ${fmt(sR.mean)} ± ${fmt(sR.sd)}；A0−A1 = ${fmt(sL.mean-sR.mean,2)}`);
+  L.push(`- x ${fmt(sx.mean)} ± ${fmt(sx.sd)}；y ${fmt(sy.mean)} ± ${fmt(sy.sd)}`);
+  L.push('\n## 最新 status'); L.push('```json\n' + (S.status?JSON.stringify(S.status):'無') + '\n```');
+  L.push('## 最新 tag_status'); L.push('```json\n' + (S.tag?JSON.stringify(S.tag):'無') + '\n```');
+  L.push('## 網頁端參數'); L.push('```json\n' + JSON.stringify(CFG) + '\n```');
+  L.push('## 最近 25 筆 UWB（raw L, raw R → 校正後 → x, y, 判定）');
+  L.push('```');
+  const t1 = now();
+  for (const s of S.samples.slice(-25)) L.push(`${fmt((s.t-t1)/1000,2)}s  ${fmt(s.L)},${fmt(s.R)} → ${fmt(s.cl)},${fmt(s.cr)} → x=${fmt(s.x)} y=${fmt(s.y)} ${s.reason}`);
+  L.push('```');
+  L.push('## 最近 30 筆事件'); L.push('```');
+  for (const e of S.logs.slice(-30)) L.push(`${e.t} ${e.msg}`);
+  L.push('```');
+  return L.join('\n');
+}
+document.getElementById('btnReport').onclick = async () => {
+  const txt = buildReport();
+  let copied = false;
+  try { await navigator.clipboard.writeText(txt); copied = true; } catch(e) {}
+  const blob = new Blob([txt], {type:'text/markdown'}); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `follow_diag_${Date.now()}.md`;
+  if (!copied) a.click();
+  log('i', copied ? '診斷報告已複製到剪貼簿，直接貼給 Claude 即可' : '剪貼簿不可用，已下載 .md 檔');
+};
+document.getElementById('btnCsv').onclick = () => {
+  const t0 = S.samples.length ? S.samples[0].t : 0;
+  const rows = ['t_s,raw_L_cm,raw_R_cm,cal_A0_cm,cal_A1_cm,x_cm,y_cm,ok,reason'];
+  for (const s of S.samples) rows.push([((s.t-t0)/1000).toFixed(3),s.L,s.R,fmt(s.cl,2),fmt(s.cr,2),fmt(s.x,2),fmt(s.y,2),s.ok?1:0,s.reason].join(','));
+  rows.push(''); rows.push('t_s,out_ch1,out_ch2,mode,uwb_ready');
+  for (const o of S.outs) rows.push([((o.t-t0)/1000).toFixed(3),o.ch1,o.ch2,o.mode,o.ready].join(','));
+  const blob = new Blob(['﻿'+rows.join('\n')], {type:'text/csv'}); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `follow_log_${Date.now()}.csv`; a.click();
+};
+document.getElementById('btnClear').onclick = () => {
+  S.samples = []; S.outs = []; S.modeChanges = []; S.logs = []; resetTopics(); S.connT = now();
+  document.getElementById('log').innerHTML = ''; log('i','已清除');
+};
+document.getElementById('btnConn').onclick = connect;
+document.getElementById('btnDemo').onclick = () => S.demo ? stopDemo() : startDemo();
+
+// 若以 https 開啟，自動提示 wss
+if (location.protocol === 'https:') {
+  const u = document.getElementById('url');
+  if (u.value.startsWith('ws://')) log('w', '此頁是 https，瀏覽器會擋 ws://，請改用 wss:// 位址，或把 HTML 存到電腦直接開啟。');
+}
+log('i', '就緒。先按「連線」，或按「模擬資料」看介面。');
+
+setInterval(() => { renderDiags(); renderTables(); }, 500);
+(function loop(){ drawTop(); renderCharts(); requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>
